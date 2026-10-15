@@ -1,69 +1,165 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
+
+import {
+  Box,
+  Card,
+  CardContent,
+  Grid,
+  Stack,
+  Typography,
+} from '@mui/material';
+
+import AppShell from '@/components/AppShell';
+
+const metrics = [
+  {
+    title: 'Revenue',
+    value: '$0.00',
+    description: 'This month',
+  },
+  {
+    title: 'Expenses',
+    value: '$0.00',
+    description: 'This month',
+  },
+  {
+    title: 'Net Profit',
+    value: '$0.00',
+    description: 'This month',
+  },
+  {
+    title: 'Profit Margin',
+    value: '0%',
+    description: 'This month',
+  },
+];
 
 export default function Home() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <AppShell>
+      <Stack spacing={4}>
+        <Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+              color: 'primary.main',
+            }}
           >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Dashboard
+          </Typography>
+
+          <Typography
+            variant="body1"
+            sx={{
+              mt: 0.5,
+              color: 'text.secondary',
+            }}
           >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            Overview of Milo + Marley business activity.
+          </Typography>
+        </Box>
+
+        <Grid container spacing={3}>
+          {metrics.map((metric) => (
+            <Grid
+              key={metric.title}
+              size={{
+                xs: 12,
+                sm: 6,
+                lg: 3,
+              }}
+            >
+              <Card sx={{ height: '100%' }}>
+                <CardContent>
+                  <Stack spacing={1}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: 'text.secondary',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {metric.title}
+                    </Typography>
+
+                    <Typography
+                      variant="h4"
+                      sx={{
+                        color: 'primary.main',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {metric.value}
+                    </Typography>
+
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                      }}
+                    >
+                      {metric.description}
+                    </Typography>
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, lg: 8 }}>
+            <Card sx={{ minHeight: 360 }}>
+              <CardContent>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
+                  Revenue vs. Expenses
+                </Typography>
+
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'text.secondary',
+                    mt: 1,
+                  }}
+                >
+                  Financial chart will appear here.
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid size={{ xs: 12, lg: 4 }}>
+            <Card sx={{ minHeight: 360 }}>
+              <CardContent>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
+                  Recent Activity
+                </Typography>
+
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'text.secondary',
+                    mt: 1,
+                  }}
+                >
+                  New sales and expenses will appear here.
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </Stack>
+    </AppShell>
   );
 }
