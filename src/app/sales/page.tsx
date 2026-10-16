@@ -40,17 +40,9 @@ import {
   usePaymentMethods,
 } from '@/context/PaymentMethodsContext';
 
-type Sale = {
-  id: number;
-  date: string;
-  productId: number;
-  productName: string;
-  quantity: number;
-  unitPrice: number;
-  paymentMethod: string;
-  customer: string;
-  notes: string;
-};
+import {
+  useSales,
+} from '@/context/SalesContext';
 
 export default function SalesPage() {
   const {
@@ -60,6 +52,12 @@ export default function SalesPage() {
   const {
     paymentMethods,
   } = usePaymentMethods();
+
+  const {
+    sales,
+    addSale,
+    deleteSale,
+  } = useSales();
 
   const activeProducts =
     products.filter(
@@ -72,11 +70,6 @@ export default function SalesPage() {
       (method) =>
         method.active
     );
-
-  const [
-    sales,
-    setSales,
-  ] = useState<Sale[]>([]);
 
   const [
     open,
@@ -180,9 +173,7 @@ export default function SalesPage() {
       return;
     }
 
-    const newSale: Sale = {
-      id: Date.now(),
-
+    addSale({
       date,
 
       productId:
@@ -202,16 +193,7 @@ export default function SalesPage() {
 
       notes:
         notes.trim(),
-    };
-
-    setSales(
-      (
-        currentSales
-      ) => [
-        newSale,
-        ...currentSales,
-      ]
-    );
+    });
 
     setOpen(false);
     resetForm();
@@ -220,15 +202,7 @@ export default function SalesPage() {
   const handleDelete = (
     id: number
   ) => {
-    setSales(
-      (
-        currentSales
-      ) =>
-        currentSales.filter(
-          (sale) =>
-            sale.id !== id
-        )
-    );
+    deleteSale(id);
   };
 
   return (

@@ -1,0 +1,113 @@
+'use client';
+
+import {
+  createContext,
+  useContext,
+  useState,
+  type ReactNode,
+} from 'react';
+
+export type Sale = {
+  id: number;
+  date: string;
+
+  productId: number;
+  productName: string;
+
+  quantity: number;
+  unitPrice: number;
+
+  paymentMethod: string;
+
+  customer: string;
+  notes: string;
+};
+
+type NewSale = Omit<Sale, 'id'>;
+
+type SalesContextType = {
+  sales: Sale[];
+
+  addSale: (
+    sale: NewSale
+  ) => void;
+
+  deleteSale: (
+    id: number
+  ) => void;
+};
+
+const SalesContext =
+  createContext<
+    SalesContextType | undefined
+  >(undefined);
+
+export function SalesProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [
+    sales,
+    setSales,
+  ] = useState<Sale[]>([]);
+
+  const addSale = (
+    sale: NewSale
+  ) => {
+    const newSale: Sale = {
+      id: Date.now(),
+      ...sale,
+    };
+
+    setSales(
+      (
+        currentSales
+      ) => [
+        newSale,
+        ...currentSales,
+      ]
+    );
+  };
+
+  const deleteSale = (
+    id: number
+  ) => {
+    setSales(
+      (
+        currentSales
+      ) =>
+        currentSales.filter(
+          (sale) =>
+            sale.id !== id
+        )
+    );
+  };
+
+  return (
+    <SalesContext.Provider
+      value={{
+        sales,
+        addSale,
+        deleteSale,
+      }}
+    >
+      {children}
+    </SalesContext.Provider>
+  );
+}
+
+export function useSales() {
+  const context =
+    useContext(
+      SalesContext
+    );
+
+  if (!context) {
+    throw new Error(
+      'useSales must be used inside SalesProvider'
+    );
+  }
+
+  return context;
+}

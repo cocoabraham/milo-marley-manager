@@ -26,6 +26,14 @@ import {
   BusinessSettingsProvider,
 } from '@/context/BusinessSettingsContext';
 
+import {
+  SalesProvider,
+} from '@/context/SalesContext';
+
+import {
+  ExpensesProvider,
+} from '@/context/ExpensesContext';
+
 export const metadata:
   Metadata = {
   title: 'Milo + Marley',
@@ -52,7 +60,11 @@ export default function RootLayout({
             <BusinessSettingsProvider>
               <ProductsProvider>
                 <PaymentMethodsProvider>
-                  {children}
+                  <SalesProvider>
+                    <ExpensesProvider>
+                      {children}
+                    </ExpensesProvider>
+                  </SalesProvider>
                 </PaymentMethodsProvider>
               </ProductsProvider>
             </BusinessSettingsProvider>

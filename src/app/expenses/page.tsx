@@ -45,39 +45,18 @@ import {
   usePaymentMethods,
 } from '@/context/PaymentMethodsContext';
 
-type ExpenseSource =
-  | 'manual'
-  | 'import';
+import {
+  useExpenses,
+  type Expense,
+  type NewExpense,
+} from '@/context/ExpensesContext';
 
-type Expense = {
-  id: number;
-  date: string;
-  category: string;
-  vendor: string;
-  description: string;
-  amount: number;
-  paymentMethod: string;
-  recurring: boolean;
-  notes: string;
-  receiptName: string;
-
-  ingredientName: string;
-  measurementType: string;
-  quantityPurchased: number;
-  measurementUnit: string;
-  costPerUnit: number;
-
-  source: ExpenseSource;
-};
-
-type ImportedExpense = Omit<
-  Expense,
-  'id'
-> & {
-  rowNumber: number;
-  valid: boolean;
-  errors: string[];
-};
+type ImportedExpense =
+  NewExpense & {
+    rowNumber: number;
+    valid: boolean;
+    errors: string[];
+  };
 
 const categories = [
   'Ingredients',
@@ -251,6 +230,20 @@ const parseExcelDate = (
 };
 
 export default function ExpensesPage() {
+  /*
+   * SHARED EXPENSE DATA
+   */
+  const {
+    expenses,
+    addExpense,
+    addExpenses,
+    updateExpense,
+    deleteExpense,
+  } = useExpenses();
+
+  /*
+   * SHARED PAYMENT METHODS
+   */
   const {
     paymentMethods,
   } = usePaymentMethods();
@@ -261,14 +254,9 @@ export default function ExpensesPage() {
         method.active
     );
 
-  const [
-    expenses,
-    setExpenses,
-  ] =
-    useState<Expense[]>(
-      []
-    );
-
+  /*
+   * ADD / EDIT MODAL
+   */
   const [
     open,
     setOpen,
@@ -282,6 +270,9 @@ export default function ExpensesPage() {
       null
     );
 
+  /*
+   * DELETE MODAL
+   */
   const [
     deleteDialogOpen,
     setDeleteDialogOpen,
@@ -295,6 +286,9 @@ export default function ExpensesPage() {
       null
     );
 
+  /*
+   * IMPORT MODAL
+   */
   const [
     importDialogOpen,
     setImportDialogOpen,
@@ -317,6 +311,9 @@ export default function ExpensesPage() {
     setImportError,
   ] = useState('');
 
+  /*
+   * STANDARD EXPENSE FIELDS
+   */
   const [
     date,
     setDate,
@@ -362,6 +359,9 @@ export default function ExpensesPage() {
     setReceiptName,
   ] = useState('');
 
+  /*
+   * INGREDIENT FIELDS
+   */
   const [
     ingredientName,
     setIngredientName,
@@ -394,6 +394,9 @@ export default function ExpensesPage() {
         quantityPurchased
       : 0;
 
+  /*
+   * SUMMARY
+   */
   const totalExpenses =
     useMemo(() => {
       return expenses.reduce(
@@ -407,6 +410,9 @@ export default function ExpensesPage() {
       );
     }, [expenses]);
 
+  /*
+   * IMPORT SUMMARY
+   */
   const validImportCount =
     importedExpenses.filter(
       (expense) =>
@@ -419,6 +425,9 @@ export default function ExpensesPage() {
         !expense.valid
     ).length;
 
+  /*
+   * FORM RESET
+   */
   const resetIngredientFields =
     () => {
       setIngredientName('');
@@ -451,6 +460,9 @@ export default function ExpensesPage() {
     setImportError('');
   };
 
+  /*
+   * ADD / EDIT
+   */
   const handleAdd = () => {
     resetForm();
     setOpen(true);
@@ -463,7 +475,9 @@ export default function ExpensesPage() {
       expense
     );
 
-    setDate(expense.date);
+    setDate(
+      expense.date
+    );
 
     setCategory(
       expense.category
@@ -521,6 +535,9 @@ export default function ExpensesPage() {
     resetForm();
   };
 
+  /*
+   * CATEGORY
+   */
   const handleCategoryChange =
     (
       newCategory: string
@@ -537,6 +554,9 @@ export default function ExpensesPage() {
       }
     };
 
+  /*
+   * INGREDIENT MEASUREMENT
+   */
   const handleMeasurementTypeChange =
     (
       newType: string
@@ -563,6 +583,9 @@ export default function ExpensesPage() {
       }
     };
 
+  /*
+   * RECEIPT
+   */
   const handleReceiptChange =
     (
       event: ChangeEvent<HTMLInputElement>
@@ -588,6 +611,9 @@ export default function ExpensesPage() {
       setReceiptName('');
     };
 
+  /*
+   * VALIDATION
+   */
   const ingredientFieldsValid =
     !isIngredient ||
     Boolean(
@@ -598,6 +624,9 @@ export default function ExpensesPage() {
         measurementUnit
     );
 
+  /*
+   * SAVE EXPENSE
+   */
   const handleSave = () => {
     if (
       !date ||
@@ -644,90 +673,69 @@ export default function ExpensesPage() {
     if (
       editingExpense
     ) {
-      setExpenses(
-        (
-          currentExpenses
-        ) =>
-          currentExpenses.map(
-            (expense) =>
-              expense.id ===
-              editingExpense.id
-                ? {
-                    ...expense,
+      updateExpense({
+        ...editingExpense,
 
-                    date,
+        date,
 
-                    category,
+        category,
 
-                    vendor:
-                      vendor.trim(),
+        vendor:
+          vendor.trim(),
 
-                    description:
-                      description.trim(),
+        description:
+          description.trim(),
 
-                    amount,
+        amount,
 
-                    paymentMethod,
+        paymentMethod,
 
-                    recurring,
+        recurring,
 
-                    notes:
-                      notes.trim(),
+        notes:
+          notes.trim(),
 
-                    receiptName,
+        receiptName,
 
-                    ...ingredientData,
-                  }
-                : expense
-          )
-      );
+        ...ingredientData,
+      });
     } else {
-      const newExpense: Expense =
-        {
-          id:
-            Date.now(),
+      addExpense({
+        date,
 
-          date,
+        category,
 
-          category,
+        vendor:
+          vendor.trim(),
 
-          vendor:
-            vendor.trim(),
+        description:
+          description.trim(),
 
-          description:
-            description.trim(),
+        amount,
 
-          amount,
+        paymentMethod,
 
-          paymentMethod,
+        recurring,
 
-          recurring,
+        notes:
+          notes.trim(),
 
-          notes:
-            notes.trim(),
+        receiptName,
 
-          receiptName,
+        ...ingredientData,
 
-          ...ingredientData,
-
-          source:
-            'manual',
-        };
-
-      setExpenses(
-        (
-          currentExpenses
-        ) => [
-          newExpense,
-          ...currentExpenses,
-        ]
-      );
+        source:
+          'manual',
+      });
     }
 
     setOpen(false);
     resetForm();
   };
 
+  /*
+   * DELETE
+   */
   const handleDeleteRequest =
     (
       expense: Expense
@@ -760,15 +768,8 @@ export default function ExpensesPage() {
         return;
       }
 
-      setExpenses(
-        (
-          currentExpenses
-        ) =>
-          currentExpenses.filter(
-            (expense) =>
-              expense.id !==
-              expenseToDelete.id
-          )
+      deleteExpense(
+        expenseToDelete.id
       );
 
       setDeleteDialogOpen(
@@ -780,9 +781,13 @@ export default function ExpensesPage() {
       );
     };
 
+  /*
+   * IMPORT DIALOG
+   */
   const handleOpenImport =
     () => {
       resetImport();
+
       setImportDialogOpen(
         true
       );
@@ -797,6 +802,9 @@ export default function ExpensesPage() {
       resetImport();
     };
 
+  /*
+   * IMPORT FILE
+   */
   const handleImportFile =
     async (
       event: ChangeEvent<HTMLInputElement>
@@ -874,6 +882,9 @@ export default function ExpensesPage() {
           return;
         }
 
+        /*
+         * Check required columns.
+         */
         const originalHeaders =
           Object.keys(
             rows[0]
@@ -912,6 +923,9 @@ export default function ExpensesPage() {
           return;
         }
 
+        /*
+         * Parse rows.
+         */
         const parsedExpenses =
           rows.map(
             (
@@ -962,6 +976,9 @@ export default function ExpensesPage() {
                   ]
                 );
 
+              /*
+               * OPTIONAL
+               */
               const rowDate =
                 parseExcelDate(
                   row.date
@@ -1018,6 +1035,9 @@ export default function ExpensesPage() {
                 string[] =
                   [];
 
+              /*
+               * ONLY FOUR REQUIRED VALUES
+               */
               if (
                 !rowCategory
               ) {
@@ -1142,6 +1162,9 @@ export default function ExpensesPage() {
       }
     };
 
+  /*
+   * CONFIRM IMPORT
+   */
   const handleConfirmImport =
     () => {
       const validRows =
@@ -1157,20 +1180,10 @@ export default function ExpensesPage() {
         return;
       }
 
-      const now =
-        Date.now();
-
       const newExpenses:
-        Expense[] =
+        NewExpense[] =
           validRows.map(
-            (
-              expense,
-              index
-            ) => ({
-              id:
-                now +
-                index,
-
+            (expense) => ({
               date:
                 expense.date,
 
@@ -1218,13 +1231,8 @@ export default function ExpensesPage() {
             })
           );
 
-      setExpenses(
-        (
-          currentExpenses
-        ) => [
-          ...newExpenses,
-          ...currentExpenses,
-        ]
+      addExpenses(
+        newExpenses
       );
 
       setImportDialogOpen(
@@ -1336,7 +1344,7 @@ export default function ExpensesPage() {
           </Stack>
         </Stack>
 
-        {/* TOTAL */}
+        {/* TOTAL EXPENSES */}
         <Card>
           <CardContent>
             <Typography
@@ -1369,7 +1377,7 @@ export default function ExpensesPage() {
           </CardContent>
         </Card>
 
-        {/* TABLE */}
+        {/* EXPENSE HISTORY */}
         <Card>
           <CardContent>
             <Typography
@@ -1675,9 +1683,7 @@ export default function ExpensesPage() {
               required
             >
               {categories.map(
-                (
-                  item
-                ) => (
+                (item) => (
                   <MenuItem
                     key={
                       item
@@ -1692,6 +1698,7 @@ export default function ExpensesPage() {
               )}
             </TextField>
 
+            {/* INGREDIENT DETAILS */}
             {isIngredient && (
               <Box
                 sx={{
@@ -1856,8 +1863,7 @@ export default function ExpensesPage() {
                           event
                         ) =>
                           setMeasurementUnit(
-                            event
-                              .target
+                            event.target
                               .value
                           )
                         }
@@ -1873,9 +1879,7 @@ export default function ExpensesPage() {
                           ? pieceUnits
                           : weightUnits
                         ).map(
-                          (
-                            unit
-                          ) => (
+                          (unit) => (
                             <MenuItem
                               key={
                                 unit.value
@@ -1960,6 +1964,7 @@ export default function ExpensesPage() {
               }}
             />
 
+            {/* COST PER UNIT */}
             {isIngredient &&
               quantityPurchased >
                 0 &&
@@ -2013,6 +2018,7 @@ export default function ExpensesPage() {
                 </Box>
               )}
 
+            {/* PAYMENT METHOD */}
             <TextField
               select
               label="Payment Method"
@@ -2031,9 +2037,7 @@ export default function ExpensesPage() {
               required
             >
               {activePaymentMethods.map(
-                (
-                  method
-                ) => (
+                (method) => (
                   <MenuItem
                     key={
                       method.id
@@ -2050,6 +2054,7 @@ export default function ExpensesPage() {
               )}
             </TextField>
 
+            {/* RECURRING */}
             <Box
               sx={{
                 p: 2,
@@ -2120,6 +2125,7 @@ export default function ExpensesPage() {
               </Stack>
             </Box>
 
+            {/* RECEIPT */}
             <Box>
               <Typography
                 variant="body2"
@@ -2349,10 +2355,21 @@ export default function ExpensesPage() {
                   gap: 1,
                 }}
               >
-                <Chip label="Category" />
-                <Chip label="Description" />
-                <Chip label="Amount" />
-                <Chip label="Payment Method" />
+                <Chip
+                  label="Category"
+                />
+
+                <Chip
+                  label="Description"
+                />
+
+                <Chip
+                  label="Amount"
+                />
+
+                <Chip
+                  label="Payment Method"
+                />
               </Stack>
 
               <Typography
