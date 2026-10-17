@@ -7,23 +7,28 @@ import {
   type ReactNode,
 } from 'react';
 
+import {
+  useSalesSessions,
+} from '@/context/SalesSessionsContext';
+
 export type Sale = {
   id: number;
+  sessionId: number;
   date: string;
-
   productId: number;
   productName: string;
-
   quantity: number;
   unitPrice: number;
-
   paymentMethod: string;
-
   customer: string;
   notes: string;
 };
 
-type NewSale = Omit<Sale, 'id'>;
+export type NewSale =
+  Omit<
+    Sale,
+    'id' | 'sessionId'
+  >;
 
 type SalesContextType = {
   sales: Sale[];
@@ -47,6 +52,10 @@ export function SalesProvider({
 }: {
   children: ReactNode;
 }) {
+  const {
+    activeSession,
+  } = useSalesSessions();
+
   const [
     sales,
     setSales,
@@ -55,15 +64,21 @@ export function SalesProvider({
   const addSale = (
     sale: NewSale
   ) => {
+    if (!activeSession) {
+      throw new Error(
+        'Cannot add a sale without an active sales session.'
+      );
+    }
+
     const newSale: Sale = {
       id: Date.now(),
+      sessionId:
+        activeSession.id,
       ...sale,
     };
 
     setSales(
-      (
-        currentSales
-      ) => [
+      (currentSales) => [
         newSale,
         ...currentSales,
       ]
@@ -74,9 +89,7 @@ export function SalesProvider({
     id: number
   ) => {
     setSales(
-      (
-        currentSales
-      ) =>
+      (currentSales) =>
         currentSales.filter(
           (sale) =>
             sale.id !== id

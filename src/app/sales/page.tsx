@@ -1,7 +1,9 @@
 'use client';
 
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -14,6 +16,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   MenuItem,
   Stack,
@@ -22,6 +25,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Typography,
@@ -42,7 +46,39 @@ import {
 
 import {
   useSales,
+  type Sale,
 } from '@/context/SalesContext';
+
+import {
+  useSalesSessions,
+} from '@/context/SalesSessionsContext';
+
+const SALES_PER_PAGE = 10;
+
+const getTodayDate = () => {
+  const today = new Date();
+
+  const year =
+    today.getFullYear();
+
+  const month =
+    String(
+      today.getMonth() + 1
+    ).padStart(
+      2,
+      '0'
+    );
+
+  const day =
+    String(
+      today.getDate()
+    ).padStart(
+      2,
+      '0'
+    );
+
+  return `${year}-${month}-${day}`;
+};
 
 export default function SalesPage() {
   const {
@@ -59,6 +95,12 @@ export default function SalesPage() {
     deleteSale,
   } = useSales();
 
+  const {
+    activeSession,
+    startSession,
+    closeSession,
+  } = useSalesSessions();
+
   const activeProducts =
     products.filter(
       (product) =>
@@ -71,20 +113,130 @@ export default function SalesPage() {
         method.active
     );
 
+  /*
+   * CURRENT SESSION SALES
+   */
+  const currentSessionSales =
+    useMemo(() => {
+      if (!activeSession) {
+        return [];
+      }
+
+      return sales.filter(
+        (sale) =>
+          sale.sessionId ===
+          activeSession.id
+      );
+    }, [
+      sales,
+      activeSession,
+    ]);
+
+  /*
+   * PAGINATION
+   */
   const [
-    open,
-    setOpen,
+    salesPage,
+    setSalesPage,
+  ] = useState(0);
+
+  const paginatedSessionSales =
+    useMemo(() => {
+      const start =
+        salesPage *
+        SALES_PER_PAGE;
+
+      const end =
+        start +
+        SALES_PER_PAGE;
+
+      return currentSessionSales.slice(
+        start,
+        end
+      );
+    }, [
+      currentSessionSales,
+      salesPage,
+    ]);
+
+  useEffect(() => {
+    setSalesPage(0);
+  }, [
+    activeSession?.id,
+  ]);
+
+  useEffect(() => {
+    const maxPage =
+      Math.max(
+        0,
+        Math.ceil(
+          currentSessionSales.length /
+            SALES_PER_PAGE
+        ) - 1
+      );
+
+    if (
+      salesPage >
+      maxPage
+    ) {
+      setSalesPage(
+        maxPage
+      );
+    }
+  }, [
+    currentSessionSales.length,
+    salesPage,
+  ]);
+
+  /*
+   * DIALOGS
+   */
+  const [
+    saleDialogOpen,
+    setSaleDialogOpen,
   ] = useState(false);
 
   const [
+    startSessionDialogOpen,
+    setStartSessionDialogOpen,
+  ] = useState(false);
+
+  const [
+    closeSessionDialogOpen,
+    setCloseSessionDialogOpen,
+  ] = useState(false);
+
+  const [
+    deleteDialogOpen,
+    setDeleteDialogOpen,
+  ] = useState(false);
+
+  const [
+    saleToDelete,
+    setSaleToDelete,
+  ] = useState<Sale | null>(
+    null
+  );
+
+  const hasPromptedForSession =
+    useRef(false);
+
+  /*
+   * FORM
+   */
+  const [
     date,
     setDate,
-  ] = useState('');
+  ] = useState(
+    getTodayDate()
+  );
 
   const [
     productId,
     setProductId,
-  ] = useState<number | ''>('');
+  ] = useState<number | ''>(
+    ''
+  );
 
   const [
     quantity,
@@ -101,6 +253,16 @@ export default function SalesPage() {
     setPaymentMethod,
   ] = useState('');
 
+  /*
+   * NEW:
+   * Used when payment method
+   * is "Other".
+   */
+  const [
+    otherPaymentMethod,
+    setOtherPaymentMethod,
+  ] = useState('');
+
   const [
     customer,
     setCustomer,
@@ -111,13 +273,61 @@ export default function SalesPage() {
     setNotes,
   ] = useState('');
 
-  const selectedProduct =
-    products.find(
-      (product) =>
-        product.id === productId
-    );
+  /*
+   * SESSION PROMPT
+   */
+  useEffect(() => {
+    if (
+      !activeSession &&
+      !hasPromptedForSession.current
+    ) {
+      hasPromptedForSession.current =
+        true;
 
-  const total =
+      setStartSessionDialogOpen(
+        true
+      );
+    }
+  }, [activeSession]);
+
+  /*
+   * SELECTED PRODUCT
+   */
+  const selectedProduct =
+    useMemo(() => {
+      if (
+        productId === ''
+      ) {
+        return null;
+      }
+
+      return (
+        products.find(
+          (product) =>
+            product.id ===
+            productId
+        ) ?? null
+      );
+    }, [
+      productId,
+      products,
+    ]);
+
+  /*
+   * PAYMENT METHOD
+   */
+  const isOtherPaymentMethod =
+    paymentMethod === 'Other';
+
+  const finalPaymentMethod =
+    isOtherPaymentMethod
+      ? otherPaymentMethod.trim()
+      : paymentMethod;
+
+  /*
+   * NEW SALE TOTAL
+   */
+  const saleTotal =
     useMemo(() => {
       return (
         quantity *
@@ -128,47 +338,216 @@ export default function SalesPage() {
       unitPrice,
     ]);
 
-  const totalSales =
+  /*
+   * SESSION SUMMARY
+   */
+  const sessionTransactionCount =
+    currentSessionSales.length;
+
+  const sessionItemCount =
     useMemo(() => {
-      return sales.reduce(
+      return currentSessionSales.reduce(
         (
-          sum,
+          total,
           sale
         ) =>
-          sum +
+          total +
+          sale.quantity,
+        0
+      );
+    }, [
+      currentSessionSales,
+    ]);
+
+  const sessionTotal =
+    useMemo(() => {
+      return currentSessionSales.reduce(
+        (
+          total,
+          sale
+        ) =>
+          total +
           sale.quantity *
             sale.unitPrice,
         0
       );
-    }, [sales]);
+    }, [
+      currentSessionSales,
+    ]);
 
+  /*
+   * PAYMENT BREAKDOWN
+   */
+  const paymentSummary =
+    useMemo(() => {
+      const totals:
+        Record<
+          string,
+          number
+        > = {};
+
+      currentSessionSales.forEach(
+        (sale) => {
+          const saleAmount =
+            sale.quantity *
+            sale.unitPrice;
+
+          totals[
+            sale.paymentMethod
+          ] =
+            (
+              totals[
+                sale.paymentMethod
+              ] ?? 0
+            ) +
+            saleAmount;
+        }
+      );
+
+      return Object.entries(
+        totals
+      ).sort(
+        (
+          [, amountA],
+          [, amountB]
+        ) =>
+          amountB -
+          amountA
+      );
+    }, [
+      currentSessionSales,
+    ]);
+
+  /*
+   * RESET FORM
+   */
   const resetForm = () => {
-    setDate('');
+    setDate(
+      getTodayDate()
+    );
+
     setProductId('');
+
     setQuantity(1);
+
     setUnitPrice(0);
+
     setPaymentMethod('');
+
+    setOtherPaymentMethod('');
+
     setCustomer('');
+
     setNotes('');
   };
 
-  const handleOpen = () => {
+  /*
+   * START SESSION
+   */
+  const handleStartSession =
+    () => {
+      startSession();
+
+      setStartSessionDialogOpen(
+        false
+      );
+    };
+
+  const handleStartSessionRequest =
+    () => {
+      setStartSessionDialogOpen(
+        true
+      );
+    };
+
+  /*
+   * ADD SALE
+   */
+  const handleAdd = () => {
+    if (!activeSession) {
+      setStartSessionDialogOpen(
+        true
+      );
+
+      return;
+    }
+
     resetForm();
-    setOpen(true);
+
+    setSaleDialogOpen(
+      true
+    );
   };
 
-  const handleClose = () => {
-    setOpen(false);
-    resetForm();
-  };
+  const handleCloseSaleDialog =
+    () => {
+      setSaleDialogOpen(
+        false
+      );
 
+      resetForm();
+    };
+
+  /*
+   * PRODUCT
+   */
+  const handleProductChange =
+    (
+      selectedId: number
+    ) => {
+      setProductId(
+        selectedId
+      );
+
+      const product =
+        products.find(
+          (item) =>
+            item.id ===
+            selectedId
+        );
+
+      if (product) {
+        setUnitPrice(
+          product.price
+        );
+      } else {
+        setUnitPrice(0);
+      }
+    };
+
+  /*
+   * PAYMENT METHOD CHANGE
+   */
+  const handlePaymentMethodChange =
+    (
+      newPaymentMethod: string
+    ) => {
+      setPaymentMethod(
+        newPaymentMethod
+      );
+
+      if (
+        newPaymentMethod !==
+        'Other'
+      ) {
+        setOtherPaymentMethod(
+          ''
+        );
+      }
+    };
+
+  /*
+   * SAVE SALE
+   */
   const handleSave = () => {
     if (
+      !activeSession ||
       !date ||
-      !productId ||
       !selectedProduct ||
       quantity <= 0 ||
-      unitPrice <= 0
+      unitPrice < 0 ||
+      !paymentMethod ||
+      !finalPaymentMethod
     ) {
       return;
     }
@@ -186,7 +565,8 @@ export default function SalesPage() {
 
       unitPrice,
 
-      paymentMethod,
+      paymentMethod:
+        finalPaymentMethod,
 
       customer:
         customer.trim(),
@@ -195,15 +575,121 @@ export default function SalesPage() {
         notes.trim(),
     });
 
-    setOpen(false);
+    setSaleDialogOpen(
+      false
+    );
+
     resetForm();
   };
 
-  const handleDelete = (
-    id: number
-  ) => {
-    deleteSale(id);
-  };
+  /*
+   * CLOSE SESSION
+   */
+  const handleCloseSessionRequest =
+    () => {
+      if (!activeSession) {
+        return;
+      }
+
+      setCloseSessionDialogOpen(
+        true
+      );
+    };
+
+  const handleCloseSessionCancel =
+    () => {
+      setCloseSessionDialogOpen(
+        false
+      );
+    };
+
+  const handleCloseSessionConfirm =
+    () => {
+      if (!activeSession) {
+        return;
+      }
+
+      closeSession();
+
+      setCloseSessionDialogOpen(
+        false
+      );
+    };
+
+  /*
+   * DELETE SALE
+   */
+  const handleDeleteRequest =
+    (
+      sale: Sale
+    ) => {
+      setSaleToDelete(
+        sale
+      );
+
+      setDeleteDialogOpen(
+        true
+      );
+    };
+
+  const handleDeleteCancel =
+    () => {
+      setDeleteDialogOpen(
+        false
+      );
+
+      setSaleToDelete(
+        null
+      );
+    };
+
+  const handleDeleteConfirm =
+    () => {
+      if (!saleToDelete) {
+        return;
+      }
+
+      deleteSale(
+        saleToDelete.id
+      );
+
+      setDeleteDialogOpen(
+        false
+      );
+
+      setSaleToDelete(
+        null
+      );
+    };
+
+  /*
+   * PAGINATION
+   */
+  const handleSalesPageChange =
+    (
+      event:
+        | React.MouseEvent<HTMLButtonElement>
+        | null,
+      newPage: number
+    ) => {
+      setSalesPage(
+        newPage
+      );
+    };
+
+  /*
+   * VALIDATION
+   */
+  const formValid =
+    Boolean(
+      activeSession &&
+        date &&
+        selectedProduct &&
+        quantity > 0 &&
+        unitPrice >= 0 &&
+        paymentMethod &&
+        finalPaymentMethod
+    );
 
   return (
     <AppShell>
@@ -233,7 +719,8 @@ export default function SalesPage() {
                 color:
                   'primary.main',
 
-                fontWeight: 700,
+                fontWeight:
+                  700,
               }}
             >
               Sales
@@ -248,57 +735,322 @@ export default function SalesPage() {
                   'text.secondary',
               }}
             >
-              Add and manage
+              Record and manage
               Milo + Marley sales.
             </Typography>
           </Box>
 
-          <Button
-            variant="contained"
-            startIcon={
-              <AddIcon />
-            }
-            onClick={
-              handleOpen
-            }
-          >
-            Add Sale
-          </Button>
+          {activeSession ? (
+            <Stack
+              spacing={1.5}
+              sx={{
+                flexDirection: {
+                  xs: 'column',
+                  sm: 'row',
+                },
+
+                alignItems:
+                  'stretch',
+              }}
+            >
+              <Button
+                variant="contained"
+                startIcon={
+                  <AddIcon />
+                }
+                onClick={
+                  handleAdd
+                }
+              >
+                Add Sale
+              </Button>
+
+              <Button
+                variant="contained"
+                onClick={
+                  handleCloseSessionRequest
+                }
+                sx={{
+                  backgroundColor:
+                    '#9B4935',
+
+                  '&:hover': {
+                    backgroundColor:
+                      '#7F3B2B',
+                  },
+                }}
+              >
+                Close Session
+              </Button>
+            </Stack>
+          ) : (
+            <Button
+              variant="contained"
+              onClick={
+                handleStartSessionRequest
+              }
+            >
+              Start Session
+            </Button>
+          )}
         </Stack>
 
-        {/* TOTAL SALES */}
+        {/* SESSION STATUS */}
         <Card>
           <CardContent>
-            <Typography
-              variant="body2"
+            <Stack
+              spacing={2}
               sx={{
-                color:
-                  'text.secondary',
+                flexDirection: {
+                  xs: 'column',
+                  sm: 'row',
+                },
+
+                justifyContent:
+                  'space-between',
+
+                alignItems: {
+                  xs: 'flex-start',
+                  sm: 'center',
+                },
               }}
             >
-              Total Sales
-            </Typography>
+              <Box>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color:
+                      'text.secondary',
+                  }}
+                >
+                  Current Session
+                </Typography>
 
-            <Typography
-              variant="h4"
-              sx={{
-                mt: 0.5,
+                {activeSession ? (
+                  <>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        mt: 0.5,
 
-                color:
-                  'primary.main',
+                        fontWeight:
+                          700,
 
-                fontWeight: 700,
-              }}
-            >
-              $
-              {totalSales.toFixed(
-                2
+                        color:
+                          'success.main',
+                      }}
+                    >
+                      Session Active
+                    </Typography>
+
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        mt: 0.5,
+
+                        color:
+                          'text.secondary',
+                      }}
+                    >
+                      Opened{' '}
+                      {new Date(
+                        activeSession.openedAt
+                      ).toLocaleString()}
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        mt: 0.5,
+
+                        fontWeight:
+                          700,
+
+                        color:
+                          'text.secondary',
+                      }}
+                    >
+                      No Active
+                      Session
+                    </Typography>
+
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        mt: 0.5,
+
+                        color:
+                          'text.secondary',
+                      }}
+                    >
+                      Start a session
+                      to begin
+                      recording sales.
+                    </Typography>
+                  </>
+                )}
+              </Box>
+
+              {activeSession && (
+                <Box
+                  sx={{
+                    textAlign: {
+                      xs: 'left',
+                      sm: 'right',
+                    },
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color:
+                        'text.secondary',
+                    }}
+                  >
+                    Current Session
+                    Sales
+                  </Typography>
+
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      mt: 0.5,
+
+                      color:
+                        'primary.main',
+
+                      fontWeight:
+                        700,
+                    }}
+                  >
+                    $
+                    {sessionTotal.toFixed(
+                      2
+                    )}
+                  </Typography>
+                </Box>
               )}
-            </Typography>
+            </Stack>
           </CardContent>
         </Card>
 
-        {/* SALES TABLE */}
+        {/* SESSION SUMMARY */}
+        {activeSession && (
+          <Box
+            sx={{
+              display:
+                'grid',
+
+              gridTemplateColumns:
+                {
+                  xs: '1fr',
+
+                  sm:
+                    'repeat(3, 1fr)',
+                },
+
+              gap: 2,
+            }}
+          >
+            <Card>
+              <CardContent>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color:
+                      'text.secondary',
+                  }}
+                >
+                  Transactions
+                </Typography>
+
+                <Typography
+                  variant="h4"
+                  sx={{
+                    mt: 0.5,
+
+                    color:
+                      'primary.main',
+
+                    fontWeight:
+                      700,
+                  }}
+                >
+                  {
+                    sessionTransactionCount
+                  }
+                </Typography>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color:
+                      'text.secondary',
+                  }}
+                >
+                  Items Sold
+                </Typography>
+
+                <Typography
+                  variant="h4"
+                  sx={{
+                    mt: 0.5,
+
+                    color:
+                      'primary.main',
+
+                    fontWeight:
+                      700,
+                  }}
+                >
+                  {
+                    sessionItemCount
+                  }
+                </Typography>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color:
+                      'text.secondary',
+                  }}
+                >
+                  Sales Total
+                </Typography>
+
+                <Typography
+                  variant="h4"
+                  sx={{
+                    mt: 0.5,
+
+                    color:
+                      'primary.main',
+
+                    fontWeight:
+                      700,
+                  }}
+                >
+                  $
+                  {sessionTotal.toFixed(
+                    2
+                  )}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Box>
+        )}
+
+        {/* CURRENT SESSION SALES */}
         <Card>
           <CardContent>
             <Typography
@@ -306,14 +1058,49 @@ export default function SalesPage() {
               sx={{
                 mb: 2,
 
-                fontWeight: 600,
+                fontWeight:
+                  600,
               }}
             >
-              Sales history
+              Current Session Sales
             </Typography>
 
-            {sales.length ===
-            0 ? (
+            {!activeSession ? (
+              <Box
+                sx={{
+                  py: 6,
+
+                  textAlign:
+                    'center',
+                }}
+              >
+                <Typography
+                  sx={{
+                    color:
+                      'text.secondary',
+                  }}
+                >
+                  There is no active
+                  sales session.
+                </Typography>
+
+                <Typography
+                  variant="body2"
+                  sx={{
+                    mt: 1,
+
+                    color:
+                      'text.secondary',
+                  }}
+                >
+                  Start a new session
+                  from the button
+                  above to begin
+                  recording sales.
+                </Typography>
+              </Box>
+            ) : currentSessionSales.length ===
+              0 ? (
               <Box
                 sx={{
                   py: 6,
@@ -329,146 +1116,277 @@ export default function SalesPage() {
                   }}
                 >
                   No sales have
-                  been added yet.
+                  been recorded in
+                  this session yet.
                 </Typography>
               </Box>
             ) : (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>
-                        Date
-                      </TableCell>
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>
+                          Date
+                        </TableCell>
 
-                      <TableCell>
-                        Product
-                      </TableCell>
+                        <TableCell>
+                          Product
+                        </TableCell>
 
-                      <TableCell
-                        align="right"
-                      >
-                        Qty
-                      </TableCell>
-
-                      <TableCell
-                        align="right"
-                      >
-                        Unit Price
-                      </TableCell>
-
-                      <TableCell
-                        align="right"
-                      >
-                        Total
-                      </TableCell>
-
-                      <TableCell>
-                        Payment
-                      </TableCell>
-
-                      <TableCell>
-                        Customer
-                      </TableCell>
-
-                      <TableCell
-                        align="right"
-                      >
-                        Actions
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-
-                  <TableBody>
-                    {sales.map(
-                      (sale) => (
-                        <TableRow
-                          key={
-                            sale.id
-                          }
+                        <TableCell
+                          align="right"
                         >
-                          <TableCell>
-                            {
-                              sale.date
+                          Quantity
+                        </TableCell>
+
+                        <TableCell
+                          align="right"
+                        >
+                          Unit Price
+                        </TableCell>
+
+                        <TableCell
+                          align="right"
+                        >
+                          Total
+                        </TableCell>
+
+                        <TableCell>
+                          Payment
+                        </TableCell>
+
+                        <TableCell>
+                          Customer
+                        </TableCell>
+
+                        {/* NEW */}
+                        <TableCell>
+                          Notes
+                        </TableCell>
+
+                        <TableCell
+                          align="right"
+                        >
+                          Actions
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+
+                    <TableBody>
+                      {paginatedSessionSales.map(
+                        (sale) => (
+                          <TableRow
+                            key={
+                              sale.id
                             }
-                          </TableCell>
-
-                          <TableCell>
-                            {
-                              sale.productName
-                            }
-                          </TableCell>
-
-                          <TableCell
-                            align="right"
                           >
-                            {
-                              sale.quantity
-                            }
-                          </TableCell>
-
-                          <TableCell
-                            align="right"
-                          >
-                            $
-                            {sale.unitPrice.toFixed(
-                              2
-                            )}
-                          </TableCell>
-
-                          <TableCell
-                            align="right"
-                          >
-                            $
-                            {(
-                              sale.quantity *
-                              sale.unitPrice
-                            ).toFixed(
-                              2
-                            )}
-                          </TableCell>
-
-                          <TableCell>
-                            {sale.paymentMethod ||
-                              '—'}
-                          </TableCell>
-
-                          <TableCell>
-                            {sale.customer ||
-                              '—'}
-                          </TableCell>
-
-                          <TableCell
-                            align="right"
-                          >
-                            <IconButton
-                              aria-label="Delete sale"
-                              color="error"
-                              onClick={() =>
-                                handleDelete(
-                                  sale.id
-                                )
+                            <TableCell>
+                              {
+                                sale.date
                               }
+                            </TableCell>
+
+                            <TableCell>
+                              {
+                                sale.productName
+                              }
+                            </TableCell>
+
+                            <TableCell
+                              align="right"
                             >
-                              <DeleteIcon />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                              {
+                                sale.quantity
+                              }
+                            </TableCell>
+
+                            <TableCell
+                              align="right"
+                            >
+                              $
+                              {sale.unitPrice.toFixed(
+                                2
+                              )}
+                            </TableCell>
+
+                            <TableCell
+                              align="right"
+                              sx={{
+                                fontWeight:
+                                  600,
+                              }}
+                            >
+                              $
+                              {(
+                                sale.quantity *
+                                sale.unitPrice
+                              ).toFixed(
+                                2
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              {
+                                sale.paymentMethod
+                              }
+                            </TableCell>
+
+                            <TableCell>
+                              {sale.customer ||
+                                '—'}
+                            </TableCell>
+
+                            {/* NEW */}
+                            <TableCell
+                              sx={{
+                                maxWidth:
+                                  240,
+                              }}
+                            >
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  overflow:
+                                    'hidden',
+
+                                  textOverflow:
+                                    'ellipsis',
+
+                                  whiteSpace:
+                                    'nowrap',
+                                }}
+                                title={
+                                  sale.notes
+                                }
+                              >
+                                {sale.notes ||
+                                  '—'}
+                              </Typography>
+                            </TableCell>
+
+                            <TableCell
+                              align="right"
+                            >
+                              <IconButton
+                                aria-label="Delete sale"
+                                color="error"
+                                onClick={() =>
+                                  handleDeleteRequest(
+                                    sale
+                                  )
+                                }
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {currentSessionSales.length >
+                  SALES_PER_PAGE && (
+                  <TablePagination
+                    component="div"
+                    count={
+                      currentSessionSales.length
+                    }
+                    page={
+                      salesPage
+                    }
+                    onPageChange={
+                      handleSalesPageChange
+                    }
+                    rowsPerPage={
+                      SALES_PER_PAGE
+                    }
+                    rowsPerPageOptions={[
+                      SALES_PER_PAGE,
+                    ]}
+                  />
+                )}
+              </>
             )}
           </CardContent>
         </Card>
       </Stack>
 
-      {/* ADD SALE DIALOG */}
+      {/* START SESSION */}
       <Dialog
-        open={open}
+        open={
+          startSessionDialogOpen
+        }
+        onClose={() =>
+          setStartSessionDialogOpen(
+            false
+          )
+        }
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>
+          Start Sales Session?
+        </DialogTitle>
+
+        <DialogContent>
+          <Typography>
+            Start a new sales
+            session to begin
+            recording sales.
+          </Typography>
+
+          <Typography
+            variant="body2"
+            sx={{
+              mt: 1.5,
+
+              color:
+                'text.secondary',
+            }}
+          >
+            Sales cannot be added
+            until a session is
+            active.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 3,
+          }}
+        >
+          <Button
+            onClick={() =>
+              setStartSessionDialogOpen(
+                false
+              )
+            }
+          >
+            Cancel
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={
+              handleStartSession
+            }
+          >
+            Start Session
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ADD SALE */}
+      <Dialog
+        open={
+          saleDialogOpen
+        }
         onClose={
-          handleClose
+          handleCloseSaleDialog
         }
         fullWidth
         maxWidth="sm"
@@ -508,33 +1426,19 @@ export default function SalesPage() {
             <TextField
               select
               label="Product"
-              value={productId}
+              value={
+                productId
+              }
               onChange={(
                 event
-              ) => {
-                const selectedId =
+              ) =>
+                handleProductChange(
                   Number(
                     event.target
                       .value
-                  );
-
-                setProductId(
-                  selectedId
-                );
-
-                const selected =
-                  products.find(
-                    (product) =>
-                      product.id ===
-                      selectedId
-                  );
-
-                if (selected) {
-                  setUnitPrice(
-                    selected.price
-                  );
-                }
-              }}
+                  )
+                )
+              }
               fullWidth
               required
             >
@@ -556,15 +1460,16 @@ export default function SalesPage() {
               )}
             </TextField>
 
-            {/* QUANTITY + UNIT PRICE */}
             <Box
               sx={{
-                display: 'grid',
+                display:
+                  'grid',
 
-                gridTemplateColumns: {
-                  xs: '1fr',
-                  sm: '1fr 1fr',
-                },
+                gridTemplateColumns:
+                  {
+                    xs: '1fr',
+                    sm: '1fr 1fr',
+                  },
 
                 gap: 2,
 
@@ -593,6 +1498,7 @@ export default function SalesPage() {
                 slotProps={{
                   htmlInput: {
                     min: 1,
+                    step: 1,
                   },
                 }}
               />
@@ -624,14 +1530,49 @@ export default function SalesPage() {
               />
             </Box>
 
-            <TextField
-              label="Total"
-              value={`$${total.toFixed(
-                2
-              )}`}
-              disabled
-              fullWidth
-            />
+            {/* TOTAL */}
+            <Box
+              sx={{
+                p: 2,
+
+                border:
+                  '1px solid',
+
+                borderColor:
+                  'divider',
+
+                borderRadius:
+                  2,
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  color:
+                    'text.secondary',
+                }}
+              >
+                Sale Total
+              </Typography>
+
+              <Typography
+                variant="h5"
+                sx={{
+                  mt: 0.5,
+
+                  fontWeight:
+                    700,
+
+                  color:
+                    'primary.main',
+                }}
+              >
+                $
+                {saleTotal.toFixed(
+                  2
+                )}
+              </Typography>
+            </Box>
 
             <TextField
               select
@@ -642,12 +1583,13 @@ export default function SalesPage() {
               onChange={(
                 event
               ) =>
-                setPaymentMethod(
+                handlePaymentMethodChange(
                   event.target
                     .value
                 )
               }
               fullWidth
+              required
             >
               {activePaymentMethods.map(
                 (method) => (
@@ -667,6 +1609,28 @@ export default function SalesPage() {
               )}
             </TextField>
 
+            {/* NEW:
+                OTHER PAYMENT METHOD */}
+            {isOtherPaymentMethod && (
+              <TextField
+                label="Specify Payment Method"
+                value={
+                  otherPaymentMethod
+                }
+                onChange={(
+                  event
+                ) =>
+                  setOtherPaymentMethod(
+                    event.target
+                      .value
+                  )
+                }
+                fullWidth
+                required
+                helperText="Enter the payment method used for this sale."
+              />
+            )}
+
             <TextField
               label="Customer"
               value={
@@ -685,7 +1649,9 @@ export default function SalesPage() {
 
             <TextField
               label="Notes"
-              value={notes}
+              value={
+                notes
+              }
               onChange={(
                 event
               ) =>
@@ -709,7 +1675,7 @@ export default function SalesPage() {
         >
           <Button
             onClick={
-              handleClose
+              handleCloseSaleDialog
             }
           >
             Cancel
@@ -721,13 +1687,326 @@ export default function SalesPage() {
               handleSave
             }
             disabled={
-              !date ||
-              !productId ||
-              quantity <= 0 ||
-              unitPrice <= 0
+              !formValid
             }
           >
-            Save Sale
+            Add Sale
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* CLOSE SESSION */}
+      <Dialog
+        open={
+          closeSessionDialogOpen
+        }
+        onClose={
+          handleCloseSessionCancel
+        }
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          Close Session?
+        </DialogTitle>
+
+        <DialogContent>
+          <Typography
+            variant="body1"
+            sx={{
+              mb: 3,
+
+              color:
+                'text.secondary',
+            }}
+          >
+            Review the session
+            summary before closing.
+          </Typography>
+
+          <Stack spacing={2}>
+            <Stack
+              sx={{
+                flexDirection:
+                  'row',
+
+                justifyContent:
+                  'space-between',
+
+                alignItems:
+                  'center',
+              }}
+            >
+              <Typography>
+                Sales transactions
+              </Typography>
+
+              <Typography
+                sx={{
+                  fontWeight:
+                    700,
+                }}
+              >
+                {
+                  sessionTransactionCount
+                }
+              </Typography>
+            </Stack>
+
+            <Stack
+              sx={{
+                flexDirection:
+                  'row',
+
+                justifyContent:
+                  'space-between',
+
+                alignItems:
+                  'center',
+              }}
+            >
+              <Typography>
+                Items sold
+              </Typography>
+
+              <Typography
+                sx={{
+                  fontWeight:
+                    700,
+                }}
+              >
+                {
+                  sessionItemCount
+                }
+              </Typography>
+            </Stack>
+
+            <Divider />
+
+            <Stack
+              sx={{
+                flexDirection:
+                  'row',
+
+                justifyContent:
+                  'space-between',
+
+                alignItems:
+                  'center',
+              }}
+            >
+              <Typography
+                sx={{
+                  fontWeight:
+                    600,
+                }}
+              >
+                Total sales
+              </Typography>
+
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight:
+                    700,
+
+                  color:
+                    'primary.main',
+                }}
+              >
+                $
+                {sessionTotal.toFixed(
+                  2
+                )}
+              </Typography>
+            </Stack>
+
+            {paymentSummary.length >
+              0 && (
+              <>
+                <Divider />
+
+                <Box>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      mb: 1.5,
+
+                      fontWeight:
+                        700,
+                    }}
+                  >
+                    Payment Methods
+                  </Typography>
+
+                  <Stack
+                    spacing={1}
+                  >
+                    {paymentSummary.map(
+                      ([
+                        method,
+                        amount,
+                      ]) => (
+                        <Stack
+                          key={
+                            method
+                          }
+                          sx={{
+                            flexDirection:
+                              'row',
+
+                            justifyContent:
+                              'space-between',
+
+                            alignItems:
+                              'center',
+                          }}
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color:
+                                'text.secondary',
+                            }}
+                          >
+                            {
+                              method
+                            }
+                          </Typography>
+
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight:
+                                600,
+                            }}
+                          >
+                            $
+                            {amount.toFixed(
+                              2
+                            )}
+                          </Typography>
+                        </Stack>
+                      )
+                    )}
+                  </Stack>
+                </Box>
+              </>
+            )}
+          </Stack>
+
+          <Typography
+            variant="body2"
+            sx={{
+              mt: 3,
+
+              color:
+                'text.secondary',
+            }}
+          >
+            Once this session is
+            closed, new sales will
+            require a new session.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 3,
+          }}
+        >
+          <Button
+            onClick={
+              handleCloseSessionCancel
+            }
+          >
+            Cancel
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={
+              handleCloseSessionConfirm
+            }
+            sx={{
+              backgroundColor:
+                '#9B4935',
+
+              '&:hover': {
+                backgroundColor:
+                  '#7F3B2B',
+              },
+            }}
+          >
+            Close Session
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DELETE SALE */}
+      <Dialog
+        open={
+          deleteDialogOpen
+        }
+        onClose={
+          handleDeleteCancel
+        }
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>
+          Delete Sale?
+        </DialogTitle>
+
+        <DialogContent>
+          <Typography>
+            You are about to
+            delete the sale for{' '}
+            <strong>
+              {
+                saleToDelete?.productName
+              }
+            </strong>
+            .
+          </Typography>
+
+          <Typography
+            variant="body2"
+            sx={{
+              mt: 1.5,
+
+              color:
+                'text.secondary',
+            }}
+          >
+            This action cannot be
+            undone.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 3,
+          }}
+        >
+          <Button
+            onClick={
+              handleDeleteCancel
+            }
+          >
+            Cancel
+          </Button>
+
+          <Button
+            variant="contained"
+            color="error"
+            onClick={
+              handleDeleteConfirm
+            }
+          >
+            Delete Sale
           </Button>
         </DialogActions>
       </Dialog>

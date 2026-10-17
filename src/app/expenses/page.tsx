@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useEffect,
   useMemo,
   useState,
   type ChangeEvent,
@@ -26,6 +27,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Typography,
@@ -57,6 +59,8 @@ type ImportedExpense =
     valid: boolean;
     errors: string[];
   };
+
+const EXPENSES_PER_PAGE = 10;
 
 const categories = [
   'Ingredients',
@@ -229,10 +233,47 @@ const parseExcelDate = (
     .slice(0, 10);
 };
 
+const isCurrentMonth = (
+  dateString: string
+) => {
+  if (!dateString) {
+    return false;
+  }
+
+  const parts =
+    dateString.split('-');
+
+  if (
+    parts.length !== 3
+  ) {
+    return false;
+  }
+
+  const year =
+    Number(parts[0]);
+
+  const month =
+    Number(parts[1]);
+
+  if (
+    !year ||
+    !month
+  ) {
+    return false;
+  }
+
+  const now =
+    new Date();
+
+  return (
+    year ===
+      now.getFullYear() &&
+    month ===
+      now.getMonth() + 1
+  );
+};
+
 export default function ExpensesPage() {
-  /*
-   * SHARED EXPENSE DATA
-   */
   const {
     expenses,
     addExpense,
@@ -241,9 +282,6 @@ export default function ExpensesPage() {
     deleteExpense,
   } = useExpenses();
 
-  /*
-   * SHARED PAYMENT METHODS
-   */
   const {
     paymentMethods,
   } = usePaymentMethods();
@@ -255,7 +293,124 @@ export default function ExpensesPage() {
     );
 
   /*
-   * ADD / EDIT MODAL
+   * CURRENT MONTH
+   */
+  const currentMonthExpenses =
+    useMemo(() => {
+      return expenses.filter(
+        (expense) =>
+          isCurrentMonth(
+            expense.date
+          )
+      );
+    }, [expenses]);
+
+  /*
+   * EXPENSES WITHOUT DATE
+   */
+  const undatedExpenses =
+    useMemo(() => {
+      return expenses.filter(
+        (expense) =>
+          !expense.date
+      );
+    }, [expenses]);
+
+  /*
+   * OPERATIONAL EXPENSE LIST
+   *
+   * Current month + undated
+   * expenses only.
+   *
+   * Older expenses remain in
+   * context for Reports.
+   */
+  const operationalExpenses =
+    useMemo(() => {
+      return [
+        ...undatedExpenses,
+        ...currentMonthExpenses,
+      ];
+    }, [
+      undatedExpenses,
+      currentMonthExpenses,
+    ]);
+
+  /*
+   * CURRENT MONTH TOTAL
+   *
+   * Undated expenses are NOT
+   * included because we cannot
+   * safely assign them to the
+   * current month.
+   */
+  const currentMonthTotal =
+    useMemo(() => {
+      return currentMonthExpenses.reduce(
+        (
+          total,
+          expense
+        ) =>
+          total +
+          expense.amount,
+        0
+      );
+    }, [
+      currentMonthExpenses,
+    ]);
+
+  /*
+   * PAGINATION
+   */
+  const [
+    expensesPage,
+    setExpensesPage,
+  ] = useState(0);
+
+  const paginatedExpenses =
+    useMemo(() => {
+      const start =
+        expensesPage *
+        EXPENSES_PER_PAGE;
+
+      const end =
+        start +
+        EXPENSES_PER_PAGE;
+
+      return operationalExpenses.slice(
+        start,
+        end
+      );
+    }, [
+      operationalExpenses,
+      expensesPage,
+    ]);
+
+  useEffect(() => {
+    const maxPage =
+      Math.max(
+        0,
+        Math.ceil(
+          operationalExpenses.length /
+            EXPENSES_PER_PAGE
+        ) - 1
+      );
+
+    if (
+      expensesPage >
+      maxPage
+    ) {
+      setExpensesPage(
+        maxPage
+      );
+    }
+  }, [
+    operationalExpenses.length,
+    expensesPage,
+  ]);
+
+  /*
+   * ADD / EDIT
    */
   const [
     open,
@@ -271,7 +426,7 @@ export default function ExpensesPage() {
     );
 
   /*
-   * DELETE MODAL
+   * DELETE
    */
   const [
     deleteDialogOpen,
@@ -287,7 +442,7 @@ export default function ExpensesPage() {
     );
 
   /*
-   * IMPORT MODAL
+   * IMPORT
    */
   const [
     importDialogOpen,
@@ -312,7 +467,7 @@ export default function ExpensesPage() {
   ] = useState('');
 
   /*
-   * STANDARD EXPENSE FIELDS
+   * FORM
    */
   const [
     date,
@@ -345,6 +500,11 @@ export default function ExpensesPage() {
   ] = useState('');
 
   const [
+    otherPaymentMethod,
+    setOtherPaymentMethod,
+  ] = useState('');
+
+  const [
     recurring,
     setRecurring,
   ] = useState(false);
@@ -360,7 +520,7 @@ export default function ExpensesPage() {
   ] = useState('');
 
   /*
-   * INGREDIENT FIELDS
+   * INGREDIENTS
    */
   const [
     ingredientName,
@@ -386,6 +546,15 @@ export default function ExpensesPage() {
     category ===
     'Ingredients';
 
+  const isOtherPaymentMethod =
+    paymentMethod ===
+    'Other';
+
+  const finalPaymentMethod =
+    isOtherPaymentMethod
+      ? otherPaymentMethod.trim()
+      : paymentMethod;
+
   const costPerUnit =
     isIngredient &&
     quantityPurchased > 0 &&
@@ -393,22 +562,6 @@ export default function ExpensesPage() {
       ? amount /
         quantityPurchased
       : 0;
-
-  /*
-   * SUMMARY
-   */
-  const totalExpenses =
-    useMemo(() => {
-      return expenses.reduce(
-        (
-          sum,
-          expense
-        ) =>
-          sum +
-          expense.amount,
-        0
-      );
-    }, [expenses]);
 
   /*
    * IMPORT SUMMARY
@@ -426,7 +579,7 @@ export default function ExpensesPage() {
     ).length;
 
   /*
-   * FORM RESET
+   * RESET FORM
    */
   const resetIngredientFields =
     () => {
@@ -442,7 +595,10 @@ export default function ExpensesPage() {
     setVendor('');
     setDescription('');
     setAmount(0);
+
     setPaymentMethod('');
+    setOtherPaymentMethod('');
+
     setRecurring(false);
     setNotes('');
     setReceiptName('');
@@ -454,20 +610,21 @@ export default function ExpensesPage() {
 
   const resetImport = () => {
     setImportFileName('');
-    setImportedExpenses(
-      []
-    );
+    setImportedExpenses([]);
     setImportError('');
   };
 
   /*
-   * ADD / EDIT
+   * ADD
    */
   const handleAdd = () => {
     resetForm();
     setOpen(true);
   };
 
+  /*
+   * EDIT
+   */
   const handleEdit = (
     expense: Expense
   ) => {
@@ -495,9 +652,30 @@ export default function ExpensesPage() {
       expense.amount
     );
 
-    setPaymentMethod(
-      expense.paymentMethod
-    );
+    const configuredMethod =
+      paymentMethods.find(
+        (method) =>
+          method.name ===
+          expense.paymentMethod
+      );
+
+    if (configuredMethod) {
+      setPaymentMethod(
+        configuredMethod.name
+      );
+
+      setOtherPaymentMethod(
+        ''
+      );
+    } else {
+      setPaymentMethod(
+        'Other'
+      );
+
+      setOtherPaymentMethod(
+        expense.paymentMethod
+      );
+    }
 
     setRecurring(
       expense.recurring
@@ -584,6 +762,27 @@ export default function ExpensesPage() {
     };
 
   /*
+   * PAYMENT METHOD
+   */
+  const handlePaymentMethodChange =
+    (
+      newPaymentMethod: string
+    ) => {
+      setPaymentMethod(
+        newPaymentMethod
+      );
+
+      if (
+        newPaymentMethod !==
+        'Other'
+      ) {
+        setOtherPaymentMethod(
+          ''
+        );
+      }
+    };
+
+  /*
    * RECEIPT
    */
   const handleReceiptChange =
@@ -624,18 +823,22 @@ export default function ExpensesPage() {
         measurementUnit
     );
 
+  const formValid =
+    Boolean(
+      date &&
+        category &&
+        description.trim() &&
+        amount > 0 &&
+        paymentMethod &&
+        finalPaymentMethod &&
+        ingredientFieldsValid
+    );
+
   /*
-   * SAVE EXPENSE
+   * SAVE
    */
   const handleSave = () => {
-    if (
-      !date ||
-      !category ||
-      !description.trim() ||
-      amount <= 0 ||
-      !paymentMethod ||
-      !ingredientFieldsValid
-    ) {
+    if (!formValid) {
       return;
     }
 
@@ -688,7 +891,8 @@ export default function ExpensesPage() {
 
         amount,
 
-        paymentMethod,
+        paymentMethod:
+          finalPaymentMethod,
 
         recurring,
 
@@ -713,7 +917,8 @@ export default function ExpensesPage() {
 
         amount,
 
-        paymentMethod,
+        paymentMethod:
+          finalPaymentMethod,
 
         recurring,
 
@@ -782,7 +987,22 @@ export default function ExpensesPage() {
     };
 
   /*
-   * IMPORT DIALOG
+   * PAGINATION
+   */
+  const handleExpensesPageChange =
+    (
+      event:
+        | React.MouseEvent<HTMLButtonElement>
+        | null,
+      newPage: number
+    ) => {
+      setExpensesPage(
+        newPage
+      );
+    };
+
+  /*
+   * IMPORT
    */
   const handleOpenImport =
     () => {
@@ -802,9 +1022,6 @@ export default function ExpensesPage() {
       resetImport();
     };
 
-  /*
-   * IMPORT FILE
-   */
   const handleImportFile =
     async (
       event: ChangeEvent<HTMLInputElement>
@@ -818,11 +1035,7 @@ export default function ExpensesPage() {
       }
 
       setImportError('');
-
-      setImportedExpenses(
-        []
-      );
-
+      setImportedExpenses([]);
       setImportFileName(
         file.name
       );
@@ -840,8 +1053,7 @@ export default function ExpensesPage() {
           );
 
         const firstSheetName =
-          workbook
-            .SheetNames[0];
+          workbook.SheetNames[0];
 
         if (
           !firstSheetName
@@ -882,9 +1094,6 @@ export default function ExpensesPage() {
           return;
         }
 
-        /*
-         * Check required columns.
-         */
         const originalHeaders =
           Object.keys(
             rows[0]
@@ -923,9 +1132,6 @@ export default function ExpensesPage() {
           return;
         }
 
-        /*
-         * Parse rows.
-         */
         const parsedExpenses =
           rows.map(
             (
@@ -976,9 +1182,6 @@ export default function ExpensesPage() {
                   ]
                 );
 
-              /*
-               * OPTIONAL
-               */
               const rowDate =
                 parseExcelDate(
                   row.date
@@ -1035,9 +1238,6 @@ export default function ExpensesPage() {
                 string[] =
                   [];
 
-              /*
-               * ONLY FOUR REQUIRED VALUES
-               */
               if (
                 !rowCategory
               ) {
@@ -1055,8 +1255,7 @@ export default function ExpensesPage() {
               }
 
               if (
-                rowAmount <=
-                0
+                rowAmount <= 0
               ) {
                 errors.push(
                   'Amount must be greater than 0'
@@ -1084,8 +1283,7 @@ export default function ExpensesPage() {
                 ImportedExpense =
                   {
                     rowNumber:
-                      index +
-                      2,
+                      index + 2,
 
                     valid:
                       errors.length ===
@@ -1162,9 +1360,6 @@ export default function ExpensesPage() {
       }
     };
 
-  /*
-   * CONFIRM IMPORT
-   */
   const handleConfirmImport =
     () => {
       const validRows =
@@ -1344,7 +1539,7 @@ export default function ExpensesPage() {
           </Stack>
         </Stack>
 
-        {/* TOTAL EXPENSES */}
+        {/* CURRENT MONTH TOTAL */}
         <Card>
           <CardContent>
             <Typography
@@ -1354,7 +1549,7 @@ export default function ExpensesPage() {
                   'text.secondary',
               }}
             >
-              Total Expenses
+              Current Month Expenses
             </Typography>
 
             <Typography
@@ -1370,29 +1565,98 @@ export default function ExpensesPage() {
               }}
             >
               $
-              {totalExpenses.toFixed(
+              {currentMonthTotal.toFixed(
                 2
               )}
+            </Typography>
+
+            <Typography
+              variant="body2"
+              sx={{
+                mt: 0.75,
+
+                color:
+                  'text.secondary',
+              }}
+            >
+              {
+                currentMonthExpenses.length
+              }{' '}
+              expense
+              {currentMonthExpenses.length ===
+              1
+                ? ''
+                : 's'}{' '}
+              this month
             </Typography>
           </CardContent>
         </Card>
 
-        {/* EXPENSE HISTORY */}
+        {/* UNDATED WARNING */}
+        {undatedExpenses.length >
+          0 && (
+          <Alert
+            severity="warning"
+          >
+            <strong>
+              {
+                undatedExpenses.length
+              }{' '}
+              expense
+              {undatedExpenses.length ===
+              1
+                ? ''
+                : 's'}{' '}
+              {undatedExpenses.length ===
+              1
+                ? 'is'
+                : 'are'}{' '}
+              missing a date.
+            </strong>{' '}
+            {undatedExpenses.length ===
+            1
+              ? 'It is'
+              : 'They are'}{' '}
+            shown below so the
+            date can be corrected.
+            Undated expenses are
+            not included in the
+            current month total.
+          </Alert>
+        )}
+
+        {/* CURRENT EXPENSES */}
         <Card>
           <CardContent>
             <Typography
               variant="h6"
               sx={{
-                mb: 2,
-
                 fontWeight:
                   600,
               }}
             >
-              Expense history
+              Current Expenses
             </Typography>
 
-            {expenses.length ===
+            <Typography
+              variant="body2"
+              sx={{
+                mt: 0.5,
+                mb: 2,
+
+                color:
+                  'text.secondary',
+              }}
+            >
+              Current calendar
+              month and expenses
+              requiring a date.
+              Previous months will
+              be available in
+              Reports.
+            </Typography>
+
+            {operationalExpenses.length ===
             0 ? (
               <Box
                 sx={{
@@ -1408,221 +1672,301 @@ export default function ExpensesPage() {
                       'text.secondary',
                   }}
                 >
-                  No expenses
-                  have been added
-                  yet.
+                  No expenses have
+                  been added for the
+                  current month.
                 </Typography>
               </Box>
             ) : (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>
-                        Date
-                      </TableCell>
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>
+                          Date
+                        </TableCell>
 
-                      <TableCell>
-                        Category
-                      </TableCell>
+                        <TableCell>
+                          Category
+                        </TableCell>
 
-                      <TableCell>
-                        Vendor
-                      </TableCell>
+                        <TableCell>
+                          Vendor
+                        </TableCell>
 
-                      <TableCell>
-                        Description
-                      </TableCell>
+                        <TableCell>
+                          Description
+                        </TableCell>
 
-                      <TableCell>
-                        Details
-                      </TableCell>
+                        <TableCell>
+                          Details
+                        </TableCell>
 
-                      <TableCell
-                        align="right"
-                      >
-                        Amount
-                      </TableCell>
-
-                      <TableCell>
-                        Payment
-                      </TableCell>
-
-                      <TableCell>
-                        Source
-                      </TableCell>
-
-                      <TableCell
-                        align="right"
-                      >
-                        Actions
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-
-                  <TableBody>
-                    {expenses.map(
-                      (
-                        expense
-                      ) => (
-                        <TableRow
-                          key={
-                            expense.id
-                          }
+                        <TableCell
+                          align="right"
                         >
-                          <TableCell>
-                            {expense.date ||
-                              '—'}
-                          </TableCell>
+                          Amount
+                        </TableCell>
 
-                          <TableCell>
-                            {
-                              expense.category
+                        <TableCell>
+                          Payment
+                        </TableCell>
+
+                        <TableCell>
+                          Receipt
+                        </TableCell>
+
+                        <TableCell>
+                          Source
+                        </TableCell>
+
+                        <TableCell
+                          align="right"
+                        >
+                          Actions
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+
+                    <TableBody>
+                      {paginatedExpenses.map(
+                        (
+                          expense
+                        ) => (
+                          <TableRow
+                            key={
+                              expense.id
                             }
-                          </TableCell>
+                          >
+                            <TableCell>
+                              {expense.date ||
+                                '—'}
+                            </TableCell>
 
-                          <TableCell>
-                            {expense.vendor ||
-                              '—'}
-                          </TableCell>
+                            <TableCell>
+                              {
+                                expense.category
+                              }
+                            </TableCell>
 
-                          <TableCell>
-                            {
-                              expense.description
-                            }
-                          </TableCell>
+                            <TableCell>
+                              {expense.vendor ||
+                                '—'}
+                            </TableCell>
 
-                          <TableCell>
-                            {expense.category ===
-                              'Ingredients' &&
-                            expense.quantityPurchased >
-                              0 ? (
-                              <Stack
-                                spacing={
-                                  0.25
-                                }
-                              >
-                                {expense.ingredientName && (
+                            <TableCell>
+                              {
+                                expense.description
+                              }
+                            </TableCell>
+
+                            <TableCell>
+                              {expense.category ===
+                                'Ingredients' &&
+                              expense.quantityPurchased >
+                                0 ? (
+                                <Stack
+                                  spacing={
+                                    0.25
+                                  }
+                                >
+                                  {expense.ingredientName && (
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        fontWeight:
+                                          600,
+                                      }}
+                                    >
+                                      {
+                                        expense.ingredientName
+                                      }
+                                    </Typography>
+                                  )}
+
                                   <Typography
-                                    variant="body2"
+                                    variant="caption"
                                     sx={{
-                                      fontWeight:
-                                        600,
+                                      color:
+                                        'text.secondary',
                                     }}
                                   >
                                     {
-                                      expense.ingredientName
+                                      expense.quantityPurchased
+                                    }{' '}
+                                    {expense.measurementUnit ||
+                                      'units'}
+                                  </Typography>
+
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      color:
+                                        'text.secondary',
+                                    }}
+                                  >
+                                    $
+                                    {expense.costPerUnit.toFixed(
+                                      2
+                                    )}{' '}
+                                    per{' '}
+                                    {getUnitLabel(
+                                      expense
+                                    )}
+                                  </Typography>
+                                </Stack>
+                              ) : (
+                                '—'
+                              )}
+                            </TableCell>
+
+                            <TableCell
+                              align="right"
+                            >
+                              $
+                              {expense.amount.toFixed(
+                                2
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              {
+                                expense.paymentMethod
+                              }
+                            </TableCell>
+
+                            <TableCell>
+                              {expense.receiptName ? (
+                                <Stack
+                                  spacing={0.75}
+                                  sx={{
+                                    flexDirection:
+                                      'row',
+
+                                    alignItems:
+                                      'center',
+
+                                    maxWidth:
+                                      180,
+                                  }}
+                                >
+                                  <AttachFileIcon
+                                    fontSize="small"
+                                    sx={{
+                                      color:
+                                        'text.secondary',
+
+                                      flexShrink:
+                                        0,
+                                    }}
+                                  />
+
+                                  <Typography
+                                    variant="body2"
+                                    title={
+                                      expense.receiptName
+                                    }
+                                    sx={{
+                                      overflow:
+                                        'hidden',
+
+                                      textOverflow:
+                                        'ellipsis',
+
+                                      whiteSpace:
+                                        'nowrap',
+                                    }}
+                                  >
+                                    {
+                                      expense.receiptName
                                     }
                                   </Typography>
-                                )}
+                                </Stack>
+                              ) : (
+                                '—'
+                              )}
+                            </TableCell>
 
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color:
-                                      'text.secondary',
-                                  }}
-                                >
-                                  {
-                                    expense.quantityPurchased
-                                  }{' '}
-                                  {expense.measurementUnit ||
-                                    'units'}
-                                </Typography>
+                            <TableCell>
+                              <Chip
+                                size="small"
+                                variant={
+                                  expense.source ===
+                                  'import'
+                                    ? 'outlined'
+                                    : 'filled'
+                                }
+                                label={
+                                  expense.source ===
+                                  'import'
+                                    ? 'Imported'
+                                    : 'Manual'
+                                }
+                              />
+                            </TableCell>
 
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color:
-                                      'text.secondary',
-                                  }}
-                                >
-                                  $
-                                  {expense.costPerUnit.toFixed(
-                                    2
-                                  )}{' '}
-                                  per{' '}
-                                  {getUnitLabel(
+                            <TableCell
+                              align="right"
+                            >
+                              <IconButton
+                                aria-label="Edit expense"
+                                onClick={() =>
+                                  handleEdit(
                                     expense
-                                  )}
-                                </Typography>
-                              </Stack>
-                            ) : (
-                              '—'
-                            )}
-                          </TableCell>
+                                  )
+                                }
+                              >
+                                <EditIcon />
+                              </IconButton>
 
-                          <TableCell
-                            align="right"
-                          >
-                            $
-                            {expense.amount.toFixed(
-                              2
-                            )}
-                          </TableCell>
+                              <IconButton
+                                aria-label="Delete expense"
+                                color="error"
+                                onClick={() =>
+                                  handleDeleteRequest(
+                                    expense
+                                  )
+                                }
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
 
-                          <TableCell>
-                            {
-                              expense.paymentMethod
-                            }
-                          </TableCell>
-
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              variant={
-                                expense.source ===
-                                'import'
-                                  ? 'outlined'
-                                  : 'filled'
-                              }
-                              label={
-                                expense.source ===
-                                'import'
-                                  ? 'Imported'
-                                  : 'Manual'
-                              }
-                            />
-                          </TableCell>
-
-                          <TableCell
-                            align="right"
-                          >
-                            <IconButton
-                              aria-label="Edit expense"
-                              onClick={() =>
-                                handleEdit(
-                                  expense
-                                )
-                              }
-                            >
-                              <EditIcon />
-                            </IconButton>
-
-                            <IconButton
-                              aria-label="Delete expense"
-                              color="error"
-                              onClick={() =>
-                                handleDeleteRequest(
-                                  expense
-                                )
-                              }
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                {operationalExpenses.length >
+                  EXPENSES_PER_PAGE && (
+                  <TablePagination
+                    component="div"
+                    count={
+                      operationalExpenses.length
+                    }
+                    page={
+                      expensesPage
+                    }
+                    onPageChange={
+                      handleExpensesPageChange
+                    }
+                    rowsPerPage={
+                      EXPENSES_PER_PAGE
+                    }
+                    rowsPerPageOptions={[
+                      EXPENSES_PER_PAGE,
+                    ]}
+                  />
+                )}
+              </>
             )}
           </CardContent>
         </Card>
       </Stack>
 
-      {/* ADD / EDIT EXPENSE */}
+      {/* ADD / EDIT */}
       <Dialog
         open={open}
         onClose={
@@ -1698,7 +2042,6 @@ export default function ExpensesPage() {
               )}
             </TextField>
 
-            {/* INGREDIENT DETAILS */}
             {isIngredient && (
               <Box
                 sx={{
@@ -1729,8 +2072,7 @@ export default function ExpensesPage() {
                       'primary.main',
                   }}
                 >
-                  Ingredient
-                  Details
+                  Ingredient Details
                 </Typography>
 
                 <Typography
@@ -1742,18 +2084,15 @@ export default function ExpensesPage() {
                       'text.secondary',
                   }}
                 >
-                  Enter the
-                  amount purchased
-                  so we can
+                  Enter the amount
+                  purchased so we can
                   calculate the
-                  ingredient cost
-                  per unit.
+                  ingredient cost per
+                  unit.
                 </Typography>
 
                 <Stack
-                  spacing={
-                    2.5
-                  }
+                  spacing={2.5}
                 >
                   <TextField
                     label="Ingredient Name"
@@ -1815,9 +2154,6 @@ export default function ExpensesPage() {
                           },
 
                         gap: 2,
-
-                        alignItems:
-                          'start',
                       }}
                     >
                       <TextField
@@ -1964,7 +2300,6 @@ export default function ExpensesPage() {
               }}
             />
 
-            {/* COST PER UNIT */}
             {isIngredient &&
               quantityPurchased >
                 0 &&
@@ -1973,14 +2308,14 @@ export default function ExpensesPage() {
                   sx={{
                     p: 2,
 
-                    borderRadius:
-                      2,
-
                     border:
                       '1px solid',
 
                     borderColor:
                       'divider',
+
+                    borderRadius:
+                      2,
                   }}
                 >
                   <Typography
@@ -2018,7 +2353,6 @@ export default function ExpensesPage() {
                 </Box>
               )}
 
-            {/* PAYMENT METHOD */}
             <TextField
               select
               label="Payment Method"
@@ -2028,7 +2362,7 @@ export default function ExpensesPage() {
               onChange={(
                 event
               ) =>
-                setPaymentMethod(
+                handlePaymentMethodChange(
                   event.target
                     .value
                 )
@@ -2054,7 +2388,26 @@ export default function ExpensesPage() {
               )}
             </TextField>
 
-            {/* RECURRING */}
+            {isOtherPaymentMethod && (
+              <TextField
+                label="Specify Payment Method"
+                value={
+                  otherPaymentMethod
+                }
+                onChange={(
+                  event
+                ) =>
+                  setOtherPaymentMethod(
+                    event.target
+                      .value
+                  )
+                }
+                fullWidth
+                required
+                helperText="Enter the payment method used for this expense."
+              />
+            )}
+
             <Box
               sx={{
                 p: 2,
@@ -2091,8 +2444,7 @@ export default function ExpensesPage() {
                         500,
                     }}
                   >
-                    Recurring
-                    expense
+                    Recurring expense
                   </Typography>
 
                   <Typography
@@ -2104,8 +2456,7 @@ export default function ExpensesPage() {
                   >
                     Use this for
                     expenses that
-                    happen
-                    regularly.
+                    happen regularly.
                   </Typography>
                 </Box>
 
@@ -2125,7 +2476,6 @@ export default function ExpensesPage() {
               </Stack>
             </Box>
 
-            {/* RECEIPT */}
             <Box>
               <Typography
                 variant="body2"
@@ -2140,9 +2490,7 @@ export default function ExpensesPage() {
               </Typography>
 
               <Stack
-                spacing={
-                  1.5
-                }
+                spacing={1.5}
               >
                 <Button
                   variant="outlined"
@@ -2245,12 +2593,7 @@ export default function ExpensesPage() {
               handleSave
             }
             disabled={
-              !date ||
-              !category ||
-              !description.trim() ||
-              amount <= 0 ||
-              !paymentMethod ||
-              !ingredientFieldsValid
+              !formValid
             }
           >
             {editingExpense
@@ -2260,7 +2603,7 @@ export default function ExpensesPage() {
         </DialogActions>
       </Dialog>
 
-      {/* IMPORT EXPENSES */}
+      {/* IMPORT */}
       <Dialog
         open={
           importDialogOpen
@@ -2290,8 +2633,8 @@ export default function ExpensesPage() {
                     600,
                 }}
               >
-                Upload an Excel
-                or CSV file
+                Upload an Excel or
+                CSV file
               </Typography>
 
               <Typography
@@ -2307,10 +2650,9 @@ export default function ExpensesPage() {
                 are required:
                 Category,
                 Description,
-                Amount, and
-                Payment Method.
-                All other columns
-                are optional.
+                Amount, and Payment
+                Method. All other
+                columns are optional.
               </Typography>
             </Box>
 
@@ -2355,21 +2697,10 @@ export default function ExpensesPage() {
                   gap: 1,
                 }}
               >
-                <Chip
-                  label="Category"
-                />
-
-                <Chip
-                  label="Description"
-                />
-
-                <Chip
-                  label="Amount"
-                />
-
-                <Chip
-                  label="Payment Method"
-                />
+                <Chip label="Category" />
+                <Chip label="Description" />
+                <Chip label="Amount" />
+                <Chip label="Payment Method" />
               </Stack>
 
               <Typography
@@ -2381,11 +2712,9 @@ export default function ExpensesPage() {
                     'text.secondary',
                 }}
               >
-                Optional:
-                Date, Vendor,
-                Notes,
-                Recurring,
-                Receipt,
+                Optional: Date,
+                Vendor, Notes,
+                Recurring, Receipt,
                 Ingredient Name,
                 Measurement Type,
                 Quantity Purchased,
@@ -2400,8 +2729,7 @@ export default function ExpensesPage() {
                 <UploadFileIcon />
               }
             >
-              Select Excel or CSV
-              File
+              Select Excel or CSV File
 
               <input
                 type="file"
@@ -2479,9 +2807,8 @@ export default function ExpensesPage() {
                   <Alert
                     severity="warning"
                   >
-                    Invalid rows
-                    will not be
-                    imported.
+                    Invalid rows will
+                    not be imported.
                   </Alert>
                 )}
 
@@ -2675,7 +3002,7 @@ export default function ExpensesPage() {
         </DialogActions>
       </Dialog>
 
-      {/* DELETE CONFIRMATION */}
+      {/* DELETE */}
       <Dialog
         open={
           deleteDialogOpen
@@ -2692,8 +3019,7 @@ export default function ExpensesPage() {
 
         <DialogContent>
           <Typography>
-            You are about to
-            delete{' '}
+            You are about to delete{' '}
             <strong>
               {
                 expenseToDelete?.description
@@ -2711,8 +3037,8 @@ export default function ExpensesPage() {
                 'text.secondary',
             }}
           >
-            This action cannot
-            be undone.
+            This action cannot be
+            undone.
           </Typography>
         </DialogContent>
 

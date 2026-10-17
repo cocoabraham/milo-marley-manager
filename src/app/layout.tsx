@@ -34,6 +34,10 @@ import {
   ExpensesProvider,
 } from '@/context/ExpensesContext';
 
+import {
+  SalesSessionsProvider,
+} from '@/context/SalesSessionsContext';
+
 export const metadata:
   Metadata = {
   title: 'Milo + Marley',
@@ -60,11 +64,13 @@ export default function RootLayout({
             <BusinessSettingsProvider>
               <ProductsProvider>
                 <PaymentMethodsProvider>
-                  <SalesProvider>
-                    <ExpensesProvider>
-                      {children}
-                    </ExpensesProvider>
-                  </SalesProvider>
+                  <SalesSessionsProvider>
+                    <SalesProvider>
+                      <ExpensesProvider>
+                        {children}
+                      </ExpensesProvider>
+                    </SalesProvider>
+                  </SalesSessionsProvider>
                 </PaymentMethodsProvider>
               </ProductsProvider>
             </BusinessSettingsProvider>
